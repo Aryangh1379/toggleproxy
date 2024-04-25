@@ -1,0 +1,110 @@
+#!/bin/bash
+set -e 
+
+. /usr/share/makepkg/util.sh
+curr_mode=$(gsettings get org.gnome.system.proxy mode)
+_CONFIGFILE="${HOME}/.config/toggleproxy.conf"
+
+g=gsettings
+p="org.gnome.system.proxy"
+
+usage() {
+	local -r COMMAND=${BASH_SOURCE[0]##*/}
+	cat <<- _EOF_
+		Usage: ${COMMAND} [PROFILE]
+
+		toggle proxy profiles with ease.
+
+		OPTIONS
+		    -h, --help     Show this help text
+_EOF_
+}
+
+if (( $# != 1 )); then
+	usage
+	exit 1
+fi
+
+if [[ ! -r $_CONFIGFILE ]]; then
+    error "config file '$_CONFIGFILE' doesnt exist or cant read it. "
+fi
+export _TOGGLEPROXY_COMMAND='toggleproxy'
+
+check_config() {
+    grep -w "$1" "$_CONFIGFILE" || error "given profile not found: %s" "$1" # && exit 1
+}
+toggle() {
+    check_config "$1"
+    $g set $p mode manual
+    addr=$(jq .$1[\"addr\"] "$_CONFIGFILE")
+    PORT=$(jq .$1[\"port\"] "$_CONFIGFILE")
+    hosport="${addr//\"/}:$PORT"
+    HOST="${addr//\"/}"
+    echo $hosport
+    HTTP=$(jq .$1.http//empty "$_CONFIGFILE")
+    HTTPS=$(jq .$1.https//empty "$_CONFIGFILE")
+    FTP=$(jq .$1.FTP//empty "$_CONFIGFILE")
+    SOCKS=$(jq .$1.socks//empty "$_CONFIGFILE")
+    for pr in http https socks ftp; do
+        case $pr in
+            http)
+                if [[ "$HTTP" == "true" ]]; then
+                    $g set ${p}.http host ${HOST:=0}
+                    $g set ${p}.http port ${PORT:=0}
+                elif [[ -z "$HTTP" ]]; then
+                    $g set ${p}.http host 0
+                    $g set ${p}.http port 0
+                fi
+                ;;
+            https)
+                if [[ "$HTTPS" == "true" ]]; then
+                    $g set ${p}.https host ${HOST:=0}
+                    $g set ${p}.https port ${PORT:=0}
+                elif [[ -z "$HTTPS" ]]; then
+                    $g set ${p}.https host 0
+                    $g set ${p}.https port 0
+                fi
+                ;;
+            socks)
+                if [[ "$SOCKS" == "true" ]]; then
+                    $g set ${p}.socks host ${HOST:=0}
+                    $g set ${p}.socks port ${PORT:=0}
+                elif [[ -z "$SOCKS" ]]; then
+                    $g set ${p}.socks host 0
+                    $g set ${p}.socks port 0
+                fi
+                ;;
+            ftp)
+                if [[ "$FTP" == "true" ]]; then
+                    $g set ${p}.ftp host ${HOST:=0}
+                    $g set ${p}.ftp port ${PORT:=0}
+                elif [[ -z "$FTP" ]]; then
+                    $g set ${p}.ftp host 0
+                    $g set ${p}.ftp port 0
+                fi
+                ;;
+        esac
+    done
+}
+
+# command checking
+case $1 in
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    none|off)
+        _TOGGLEPROXY_COMMAND+=" $1"
+        # shellcheck source=src/lib/aur.sh
+        $g set ${p} mode none
+        $g set ${p} mode none
+        #pkgctl_aur "$@"
+        exit 0
+        ;;
+    *)
+        _TOGGLEPROXY_COMMAND+=" $1"
+      #  shift
+        toggle "$@"
+        exit 0
+        ;;
+esac
