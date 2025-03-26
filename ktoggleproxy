@@ -1,0 +1,137 @@
+#!/bin/bash
+
+# Configuration file path
+CONFIG_FILE="$HOME/.config/toggleproxy/config.json"
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed. Please install it first."
+    echo "On Debian/Ubuntu: sudo apt install jq"
+    echo "On Fedora: sudo dnf install jq"
+    echo "On Arch: sudo pacman -S jq"
+    exit 1
+fi
+
+# Function to list available services
+list_services() {
+    echo "Available proxy services:"
+    jq -r 'keys[]' "$CONFIG_FILE" | while read -r service; do
+        local addr=$(jq -r ".\"${service}\".addr" "$CONFIG_FILE")
+        local port=$(jq -r ".\"${service}\".port" "$CONFIG_FILE")
+        echo "  $service (${addr}:${port})"
+    done
+}
+
+# Function to read configuration
+read_config() {
+    local service=$1
+    jq -r ".\"${service}\"" "$CONFIG_FILE"
+}
+
+# Function to set proxy settings
+set_proxy() {
+    local service=$1
+    local config=$(read_config "$service")
+    
+    if [ "$config" == "null" ]; then
+        echo "Error: Service '$service' not found in configuration."
+        list_services
+        exit 1
+    fi
+    
+    local addr=$(echo "$config" | jq -r '.addr')
+    local port=$(echo "$config" | jq -r '.port')
+    local socks=$(echo "$config" | jq -r '.socks')
+    local http=$(echo "$config" | jq -r '.http')
+    local https=$(echo "$config" | jq -r '.https')
+    
+    # Set proxy settings using kwriteconfig6 (KDE Plasma 6)
+    if [ "$http" == "true" ]; then
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpProxy" "http://$addr:$port"
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpsProxy" "http://$addr:$port"
+    else
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpProxy" ""
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpsProxy" ""
+    fi
+    
+    if [ "$socks" == "true" ]; then
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "socksProxy" "socks://$addr:$port"
+    else
+        kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "socksProxy" ""
+    fi
+    
+    # Set proxy mode (1 = manually configured proxy)
+    kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "ProxyType" "1"
+    
+    # Apply settings
+    dbus-send --type=signal /KIO/Scheduler org.kde.KIO.Scheduler.reparseSlaveConfiguration string:""
+    
+    echo "Proxy settings updated for $service: $addr:$port"
+    echo "HTTP/HTTPS: $http, SOCKS: $socks"
+}
+
+# Function to disable proxy
+disable_proxy() {
+    kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "ProxyType" "0" # No proxy
+    kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpProxy" ""
+    kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "httpsProxy" ""
+    kwriteconfig6 --file kioslaverc --group "Proxy Settings" --key "socksProxy" ""
+    
+    # Apply settings
+    dbus-send --type=signal /KIO/Scheduler org.kde.KIO.Scheduler.reparseSlaveConfiguration string:""
+    
+    echo "Proxy disabled"
+}
+
+# Function to show current settings
+show_status() {
+    local proxy_type=$(kreadconfig6 --file kioslaverc --group "Proxy Settings" --key "ProxyType")
+    local http_proxy=$(kreadconfig6 --file kioslaverc --group "Proxy Settings" --key "httpProxy")
+    local https_proxy=$(kreadconfig6 --file kioslaverc --group "Proxy Settings" --key "httpsProxy")
+    local socks_proxy=$(kreadconfig6 --file kioslaverc --group "Proxy Settings" --key "socksProxy")
+    
+    case "$proxy_type" in
+        "0") echo "Current status: Proxy is disabled" ;;
+        "1") 
+            echo "Current status: Proxy is enabled"
+            [ -n "$http_proxy" ] && echo "HTTP Proxy: $http_proxy"
+            [ -n "$https_proxy" ] && echo "HTTPS Proxy: $https_proxy"
+            [ -n "$socks_proxy" ] && echo "SOCKS Proxy: $socks_proxy"
+            ;;
+        *) echo "Current status: Unknown proxy configuration" ;;
+    esac
+}
+
+# Main script
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [service_name|off|status|list]"
+    echo "Run '$0 list' to see available proxy services"
+    exit 1
+fi
+
+case "$1" in
+    "off")
+        disable_proxy
+        ;;
+    "status")
+        show_status
+        ;;
+    "list")
+        list_services
+        ;;
+    *)
+        if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Error: Configuration file not found at $CONFIG_FILE"
+            exit 1
+        fi
+        
+        # Check if the service exists in config
+        if jq -e ".\"${1}\"" "$CONFIG_FILE" >/dev/null 2>&1; then
+            set_proxy "$1"
+        else
+            echo "Error: Service '$1' not found in configuration."
+            list_services
+            exit 1
+        fi
+        ;;
+esac
