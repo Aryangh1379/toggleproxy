@@ -13,5 +13,5 @@ $ toggleproxy none
 ```
 and your Gnome proxy settings will be unset.
 
-###fun fact
+### fun fact
 the gtoggleproxy is made by a human (me) and the ktoggleproxy is made by AI :)
