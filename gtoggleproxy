@@ -3,7 +3,7 @@ set -e
 
 . /usr/share/makepkg/util.sh
 curr_mode=$(gsettings get org.gnome.system.proxy mode)
-_CONFIGFILE="${HOME}/.config/toggleproxy.conf"
+_CONFIGFILE="${HOME}/.config/toggleproxy.json"
 
 g=gsettings
 p="org.gnome.system.proxy"
