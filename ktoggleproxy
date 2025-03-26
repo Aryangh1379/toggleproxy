@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration file path
-CONFIG_FILE="$HOME/.config/toggleproxy/config.json"
+CONFIG_FILE="$HOME/.config/toggleproxy.json"
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then

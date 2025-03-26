@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Universal proxy toggler that works with both KDE and GNOME
+
+# Function to detect desktop environment
+detect_de() {
+    if [ "$XDG_CURRENT_DESKTOP" = "KDE" ] || 
+       [ "$XDG_CURRENT_DESKTOP" = "kde" ] || 
+       [ "$XDG_SESSION_DESKTOP" = "KDE" ] || 
+       [ "$XDG_SESSION_DESKTOP" = "kde" ] || 
+       [ "$DESKTOP_SESSION" = "plasma" ] || 
+       [ "$DESKTOP_SESSION" = "plasmawayland" ]; then
+        echo "kde"
+    elif [ "$XDG_CURRENT_DESKTOP" = "GNOME" ] || 
+         [ "$XDG_CURRENT_DESKTOP" = "gnome" ] || 
+         [ "$XDG_SESSION_DESKTOP" = "GNOME" ] || 
+         [ "$XDG_SESSION_DESKTOP" = "gnome" ] || 
+         [ "$DESKTOP_SESSION" = "gnome" ] || 
+         [ "$DESKTOP_SESSION" = "gnome-wayland" ] || 
+         [ "$DESKTOP_SESSION" = "ubuntu" ]; then
+        echo "gnome"
+    else
+        echo "unknown"
+    fi
+}
+
+# Main script
+DE=$(detect_de)
+
+case "$DE" in
+    "kde")
+        # For KDE, pass all arguments to ktoggleproxy
+        if command -v ktoggleproxy &> /dev/null; then
+            ktoggleproxy "$@"
+        else
+            echo "Error: ktoggleproxy not found. Please install it first."
+            exit 1
+        fi
+        ;;
+    "gnome")
+        # For GNOME, filter out list/status commands before passing to gtoggleproxy
+        if [ "$1" = "list" ] || [ "$1" = "status" ]; then
+            echo "Note: 'list' and 'status' commands are not supported in GNOME"
+            echo "Passing other arguments to gtoggleproxy..."
+            shift
+        fi
+        
+        if command -v gtoggleproxy &> /dev/null; then
+            gtoggleproxy "$@"
+        else
+            echo "Error: gtoggleproxy not found. Please install it first."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Error: Unsupported desktop environment detected."
+        echo "Please run ktoggleproxy or gtoggleproxy directly for your DE."
+        exit 1
+        ;;
+esac

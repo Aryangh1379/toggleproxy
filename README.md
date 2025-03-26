@@ -13,3 +13,4 @@ $ toggleproxy none
 ```
 and your Gnome proxy settings will be unset.
 
+###fun
